@@ -75,7 +75,23 @@ class UriSigner
         $hash = urlencode($params['_hash']);
         unset($params['_hash']);
 
-        return hash_equals($this->computeHash($this->buildUrl($url, $params)), $hash);
+        $expected = $this->computeHash($this->buildUrl($url, $params));
+
+        if (function_exists('hash_equals')) {
+            return hash_equals($expected, $hash);
+        }
+
+        // PHP < 5.6 without symfony/polyfill-php56: constant time comparison
+        if (!is_string($hash) || strlen($expected) !== strlen($hash)) {
+            return false;
+        }
+
+        $result = 0;
+        for ($i = 0, $len = strlen($expected); $i < $len; ++$i) {
+            $result |= ord($expected[$i]) ^ ord($hash[$i]);
+        }
+
+        return 0 === $result;
     }
 
     private function computeHash($uri)
