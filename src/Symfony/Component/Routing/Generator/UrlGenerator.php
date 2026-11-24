@@ -140,7 +140,7 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
             if ('variable' === $token[0]) {
                 if (!$optional || !array_key_exists($token[3], $defaults) || null !== $mergedParams[$token[3]] && (string) $mergedParams[$token[3]] !== (string) $defaults[$token[3]]) {
                     // check requirement
-                    if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#', $mergedParams[$token[3]])) {
+                    if (null !== $this->strictRequirements && !preg_match('#^(?:'.$token[2].')$#', $mergedParams[$token[3]])) {
                         $message = sprintf('Parameter "%s" for route "%s" must match "%s" ("%s" given) to generate a corresponding URL.', $token[3], $name, $token[2], $mergedParams[$token[3]]);
                         if ($this->strictRequirements) {
                             throw new InvalidParameterException($message);
@@ -173,11 +173,16 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
         // the path segments "." and ".." are interpreted as relative reference when resolving a URI; see http://tools.ietf.org/html/rfc3986#section-3.3
         // so we need to encode them as they are not used for this purpose here
         // otherwise we would generate a URI that, when followed by a user agent (e.g. browser), does not match this route
-        $url = strtr($url, array('/../' => '/%2E%2E/', '/./' => '/%2E/'));
-        if ('/..' === substr($url, -3)) {
-            $url = substr($url, 0, -2).'%2E%2E';
-        } elseif ('/.' === substr($url, -2)) {
-            $url = substr($url, 0, -1).'%2E';
+        if (false !== strpos($url, '/.')) {
+            $segments = explode('/', $url);
+            foreach ($segments as $i => $segment) {
+                if ('.' === $segment) {
+                    $segments[$i] = '%2E';
+                } elseif ('..' === $segment) {
+                    $segments[$i] = '%2E%2E';
+                }
+            }
+            $url = implode('/', $segments);
         }
 
         $schemeAuthority = '';
@@ -199,7 +204,7 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
             $routeHost = '';
             foreach ($hostTokens as $token) {
                 if ('variable' === $token[0]) {
-                    if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#i', $mergedParams[$token[3]])) {
+                    if (null !== $this->strictRequirements && !preg_match('#^(?:'.$token[2].')$#i', $mergedParams[$token[3]])) {
                         $message = sprintf('Parameter "%s" for route "%s" must match "%s" ("%s" given) to generate a corresponding URL.', $token[3], $name, $token[2], $mergedParams[$token[3]]);
 
                         if ($this->strictRequirements) {
