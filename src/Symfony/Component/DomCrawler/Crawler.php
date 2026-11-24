@@ -239,7 +239,6 @@ class Crawler extends \SplObjectStorage
         $disableEntities = libxml_disable_entity_loader(true);
 
         $dom = new \DOMDocument('1.0', $charset);
-        $dom->validateOnParse = true;
 
         if ('' !== trim($content)) {
             @$dom->loadXML($content, $options);
