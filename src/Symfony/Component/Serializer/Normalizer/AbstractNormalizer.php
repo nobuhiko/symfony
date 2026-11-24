@@ -300,6 +300,12 @@ abstract class AbstractNormalizer extends SerializerAwareNormalizer implements N
      */
     protected function instantiateObject(array &$data, $class, array &$context, \ReflectionClass $reflectionClass, $allowedAttributes)
     {
+        // never build file objects from denormalized data: the constructor arguments would let
+        // the client point an UploadedFile or any SplFileInfo at a file of the server (CVE-2026-118515)
+        if (is_a($class, 'SplFileInfo', true)) {
+            throw new \Symfony\Component\Serializer\Exception\UnexpectedValueException(sprintf('Cannot create an instance of %s from serialized data: file objects are not denormalized.', $class));
+        }
+
         if (
             isset($context[static::OBJECT_TO_POPULATE]) &&
             \is_object($context[static::OBJECT_TO_POPULATE]) &&

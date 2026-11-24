@@ -51,6 +51,8 @@ class ProcessUtils
             $quote = false;
             foreach (preg_split('/(")/', $argument, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE) as $part) {
                 if ('"' === $part) {
+                    // always quote: an unquoted argument is rewritten by MSYS2/Git Bash (CVE-2026-24739)
+                    $quote = true;
                     $escapedArgument .= '\\"';
                 } elseif (self::isSurroundedBy($part, '%')) {
                     // Avoid environment variable expansion
