@@ -325,6 +325,21 @@ class Request
         $server['REQUEST_METHOD'] = strtoupper($method);
 
         $components = parse_url($uri);
+
+        if (false === $components) {
+            throw new \InvalidArgumentException('Invalid URI.');
+        }
+
+        if (false !== ($i = strpos($uri, '\\')) && $i < strcspn($uri, '?#')) {
+            throw new \InvalidArgumentException('Invalid URI: A URI cannot contain a backslash.');
+        }
+        if (strlen($uri) !== strcspn($uri, "\r\n\t")) {
+            throw new \InvalidArgumentException('Invalid URI: A URI cannot contain CR/LF/TAB characters.');
+        }
+        if ('' !== $uri && (ord($uri[0]) <= 32 || ord($uri[strlen($uri) - 1]) <= 32)) {
+            throw new \InvalidArgumentException('Invalid URI: A URI must not start nor end with ASCII control characters or spaces.');
+        }
+
         if (isset($components['host'])) {
             $server['SERVER_NAME'] = $components['host'];
             $server['HTTP_HOST'] = $components['host'];
@@ -1873,12 +1888,14 @@ class Request
             $requestUri = '/'.$requestUri;
         }
 
-        $pathInfo = substr($requestUri, strlen($baseUrl));
-        if (null !== $baseUrl && (false === $pathInfo || '' === $pathInfo)) {
-            // If substr() returns false then PATH_INFO is set to an empty string
-            return '/';
-        } elseif (null === $baseUrl) {
+        if (null === $baseUrl) {
             return $requestUri;
+        }
+
+        $pathInfo = substr($requestUri, strlen($baseUrl));
+        if (false === $pathInfo || '' === $pathInfo || '/' !== $pathInfo[0]) {
+            // If substr() returns false then PATH_INFO is set to an empty string
+            return '/'.$pathInfo;
         }
 
         return (string) $pathInfo;
