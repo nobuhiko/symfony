@@ -1810,6 +1810,11 @@ class Request
             $requestUri = '/'.$requestUri;
         }
 
+        if (0 === strpos($requestUri, '//') || 0 === strpos($requestUri, '/\\')) {
+            // the URI starts with a host that the client chose: URLs built on it would point there
+            return '';
+        }
+
         if ($baseUrl && false !== $prefix = $this->getUrlencodedPrefix($requestUri, $baseUrl)) {
             // full $baseUrl matches
             return $prefix;
