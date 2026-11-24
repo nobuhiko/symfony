@@ -260,7 +260,18 @@ class Process
         $commandline = $this->commandline;
 
         if ('\\' === DIRECTORY_SEPARATOR && $this->enhanceWindowsCompatibility) {
-            $commandline = 'cmd /V:ON /E:ON /D /C "('.$commandline.')';
+            // load the shell from %PATH%, not from the current directory (CVE-2024-51736)
+            static $comSpec;
+
+            if (!$comSpec) {
+                $finder = new ExecutableFinder();
+                if ($comSpec = $finder->find('cmd.exe')) {
+                    // Escape according to CommandLineToArgvW rules
+                    $comSpec = '"'.preg_replace('{(\\\\*+)"}', '$1$1\\"', $comSpec).'"';
+                }
+            }
+
+            $commandline = ($comSpec ?: 'cmd').' /V:ON /E:ON /D /C "('.$commandline.')';
             foreach ($this->processPipes->getFiles() as $offset => $filename) {
                 $commandline .= ' '.$offset.'>'.ProcessUtils::escapeArgument($filename);
             }
