@@ -64,6 +64,7 @@ class Parser
         }
 
         $this->refs = array();
+        ParserState::start(strlen($value));
 
         $mbEncoding = null;
         $e = null;
@@ -89,6 +90,7 @@ class Parser
         $this->refs = array();
         $this->skippedLineNumbers = array();
         $this->locallySkippedLineNumbers = array();
+        ParserState::end();
 
         if (null !== $e) {
             throw $e;
@@ -124,6 +126,7 @@ class Parser
             }
 
             $isRef = $mergeNode = false;
+            $nodeCount = ParserState::$nodeCount;
             if (self::preg_match('#^\-((?P<leadspaces>\s+)(?P<value>.+))?$#u', rtrim($this->currentLine), $values)) {
                 if ($context && 'mapping' == $context) {
                     throw new ParseException('You cannot define a sequence item when in a mapping', $this->getRealCurrentLineNb() + 1, $this->currentLine);
@@ -155,6 +158,7 @@ class Parser
                 }
                 if ($isRef) {
                     $this->refs[$isRef] = end($data);
+                    ParserState::$anchorNodeCounts[$isRef] = ParserState::$nodeCount - $nodeCount;
                 }
             } elseif (
                 self::preg_match('#^(?P<key>'.Inline::REGEX_QUOTED_STRING.'|[^ \'"\[\{].*?) *\:(\s+(?P<value>.+))?$#u', rtrim($this->currentLine), $values)
@@ -195,6 +199,8 @@ class Parser
                         if (!is_array($refValue)) {
                             throw new ParseException('YAML merge keys used with a scalar value instead of an array.', $this->getRealCurrentLineNb() + 1, $this->currentLine);
                         }
+
+                        ParserState::countAlias($refName, $refValue, $this->getRealCurrentLineNb() + 1, $this->currentLine);
 
                         $data += $refValue; // array union
                     } else {
@@ -247,6 +253,7 @@ class Parser
 
                         if ('<<' === $key) {
                             $this->refs[$refMatches['ref']] = $value;
+                            ParserState::$anchorNodeCounts[$refMatches['ref']] = ParserState::$nodeCount - $nodeCount;
                             $data += $value;
                         } elseif ($allowOverwrite || !isset($data[$key])) {
                             // Spec: Keys MUST be unique; first one wins.
@@ -264,6 +271,7 @@ class Parser
                 }
                 if ($isRef) {
                     $this->refs[$isRef] = $data[$key];
+                    ParserState::$anchorNodeCounts[$isRef] = ParserState::$nodeCount - $nodeCount;
                 }
 
                 if ($objectForMap && !is_object($data)) {
@@ -293,6 +301,8 @@ class Parser
             }
         }
 
+        ParserState::$nodeCount += count($data);
+
         return empty($data) ? null : $data;
     }
 
@@ -311,7 +321,16 @@ class Parser
         $parser = new self($offset, $this->totalNumberOfLines, $skippedLineNumbers);
         $parser->refs = &$this->refs;
 
-        return $parser->doParse($yaml, $exceptionOnInvalidType, $objectSupport, $objectForMap);
+        // a ParseException aborts the whole document, and parse() resets the state
+        ParserState::enterNestingLevel($offset + 1, $this->currentLine);
+        $cost = ParserState::enterNestedBlock($yaml, $offset + 1, $this->currentLine);
+
+        $data = $parser->doParse($yaml, $exceptionOnInvalidType, $objectSupport, $objectForMap);
+
+        ParserState::leaveNestedBlock($cost);
+        ParserState::leaveNestingLevel();
+
+        return $data;
     }
 
     /**
@@ -515,6 +534,8 @@ class Parser
             if (!array_key_exists($value, $this->refs)) {
                 throw new ParseException(sprintf('Reference "%s" does not exist.', $value), $this->currentLineNb + 1, $this->currentLine);
             }
+
+            ParserState::countAlias($value, $this->refs[$value], $this->getRealCurrentLineNb() + 1, $this->currentLine);
 
             return $this->refs[$value];
         }
@@ -722,11 +743,11 @@ class Parser
 
         // strip YAML header
         $count = 0;
-        $value = preg_replace('#^\%YAML[: ][\d\.]+.*\n#u', '', $value, -1, $count);
+        $value = preg_replace('#^%YAML[: ][\d.]++[^\n]*+\n#u', '', $value, -1, $count);
         $this->offset += $count;
 
         // remove leading comments
-        $trimmedValue = preg_replace('#^(\#.*?\n)+#s', '', $value, -1, $count);
+        $trimmedValue = preg_replace('#^(?:\#[^\n]*+\n)++#', '', $value, -1, $count);
         if (1 == $count) {
             // items have been removed, update the offset
             $this->offset += substr_count($value, "\n") - substr_count($trimmedValue, "\n");
@@ -734,14 +755,14 @@ class Parser
         }
 
         // remove start of the document marker (---)
-        $trimmedValue = preg_replace('#^\-\-\-.*?\n#s', '', $value, -1, $count);
+        $trimmedValue = preg_replace('#^---[^\n]*+\n#', '', $value, -1, $count);
         if (1 == $count) {
             // items have been removed, update the offset
             $this->offset += substr_count($value, "\n") - substr_count($trimmedValue, "\n");
             $value = $trimmedValue;
 
             // remove end of the document marker (...)
-            $value = preg_replace('#\.\.\.\s*$#', '', $value);
+            $value = preg_replace('#\.\.\.[ \t]*+$#', '', $value);
         }
 
         return $value;

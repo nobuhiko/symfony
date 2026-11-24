@@ -58,18 +58,26 @@ class Inline
         }
 
         $i = 0;
-        switch ($value[0]) {
-            case '[':
-                $result = self::parseSequence($value, $i, $references);
-                ++$i;
-                break;
-            case '{':
-                $result = self::parseMapping($value, $i, $references);
-                ++$i;
-                break;
-            default:
-                $result = self::parseScalar($value, null, array('"', "'"), $i, true, $references);
+        $nestingLevel = ParserState::$nestingLevel;
+        try {
+            switch ($value[0]) {
+                case '[':
+                    $result = self::parseSequence($value, $i, $references);
+                    ++$i;
+                    break;
+                case '{':
+                    $result = self::parseMapping($value, $i, $references);
+                    ++$i;
+                    break;
+                default:
+                    $result = self::parseScalar($value, null, array('"', "'"), $i, true, $references);
+            }
+        } catch (\Exception $e) {
+            ParserState::$nestingLevel = $nestingLevel;
+
+            throw $e;
         }
+        ParserState::$nestingLevel = $nestingLevel;
 
         // some comments are allowed at the end
         if (preg_replace('/\s+#.*$/A', '', substr($value, $i))) {
@@ -230,11 +238,12 @@ class Inline
             $output = self::parseQuotedScalar($scalar, $i);
 
             if (null !== $delimiters) {
-                $tmp = ltrim(substr($scalar, $i), ' ');
-                if ('' === $tmp) {
+                // look at the next character in place: copying the rest of the string for each scalar is quadratic
+                $next = $i + strspn($scalar, ' ', $i);
+                if (!isset($scalar[$next])) {
                     throw new ParseException(sprintf('Unexpected end of line, expected one of "%s".', implode($delimiters)));
                 }
-                if (!in_array($tmp[0], $delimiters)) {
+                if (!in_array($scalar[$next], $delimiters)) {
                     throw new ParseException(sprintf('Unexpected characters (%s).', substr($scalar, $i)));
                 }
             }
@@ -248,7 +257,7 @@ class Inline
                 if (Parser::preg_match('/[ \t]+#/', $output, $match, PREG_OFFSET_CAPTURE)) {
                     $output = substr($output, 0, $match[0][1]);
                 }
-            } elseif (Parser::preg_match('/^(.+?)('.implode('|', $delimiters).')/', substr($scalar, $i), $match)) {
+            } elseif (Parser::preg_match('/\G(.+?)('.implode('|', $delimiters).')/', $scalar, $match, 0, $i)) {
                 $output = $match[1];
                 $i += strlen($output);
             } else {
@@ -275,7 +284,8 @@ class Inline
      */
     private static function parseQuotedScalar($scalar, &$i)
     {
-        if (!Parser::preg_match('/'.self::REGEX_QUOTED_STRING.'/Au', substr($scalar, $i), $match)) {
+        // match in place, without the u modifier that validates the whole string on each call: copying or scanning the rest of the string for each scalar is quadratic
+        if (!Parser::preg_match('/'.self::REGEX_QUOTED_STRING.'/A', $scalar, $match, 0, $i) || 1 !== preg_match('//u', $match[0])) {
             throw new ParseException(sprintf('Malformed inline YAML string: %s.', substr($scalar, $i)));
         }
 
@@ -309,6 +319,7 @@ class Inline
         $output = array();
         $len = strlen($sequence);
         ++$i;
+        ParserState::enterNestingLevel();
 
         // [foo, bar, ...]
         while ($i < $len) {
@@ -322,6 +333,9 @@ class Inline
                     $output[] = self::parseMapping($sequence, $i, $references);
                     break;
                 case ']':
+                    ParserState::leaveNestingLevel();
+                    ParserState::$nodeCount += count($output);
+
                     return $output;
                 case ',':
                 case ' ':
@@ -369,6 +383,7 @@ class Inline
         $len = strlen($mapping);
         ++$i;
         $allowOverwrite = false;
+        ParserState::enterNestingLevel();
 
         // {foo: bar, bar:foo, ...}
         while ($i < $len) {
@@ -378,6 +393,9 @@ class Inline
                     ++$i;
                     continue 2;
                 case '}':
+                    ParserState::leaveNestingLevel();
+                    ParserState::$nodeCount += count($output);
+
                     if (self::$objectForMap) {
                         return (object) $output;
                     }
@@ -486,6 +504,8 @@ class Inline
             if (!array_key_exists($value, $references)) {
                 throw new ParseException(sprintf('Reference "%s" does not exist.', $value));
             }
+
+            ParserState::countAlias($value, $references[$value]);
 
             return $references[$value];
         }
