@@ -43,8 +43,8 @@ class CodeExtension extends AbstractExtension
     public function getFilters()
     {
         return array(
-            new TwigFilter('abbr_class', array($this, 'abbrClass'), array('is_safe' => array('html'))),
-            new TwigFilter('abbr_method', array($this, 'abbrMethod'), array('is_safe' => array('html'))),
+            new TwigFilter('abbr_class', array($this, 'abbrClass'), array('is_safe' => array('html'), 'pre_escape' => 'html')),
+            new TwigFilter('abbr_method', array($this, 'abbrMethod'), array('is_safe' => array('html'), 'pre_escape' => 'html')),
             new TwigFilter('format_args', array($this, 'formatArgs'), array('is_safe' => array('html'))),
             new TwigFilter('format_args_as_text', array($this, 'formatArgsAsText')),
             new TwigFilter('file_excerpt', array($this, 'fileExcerpt'), array('is_safe' => array('html'))),
@@ -88,24 +88,25 @@ class CodeExtension extends AbstractExtension
         $result = array();
         foreach ($args as $key => $item) {
             if ('object' === $item[0]) {
+                $item[1] = htmlspecialchars($item[1], ENT_COMPAT, $this->charset);
                 $parts = explode('\\', $item[1]);
                 $short = array_pop($parts);
                 $formattedValue = sprintf('<em>object</em>(<abbr title="%s">%s</abbr>)', $item[1], $short);
             } elseif ('array' === $item[0]) {
-                $formattedValue = sprintf('<em>array</em>(%s)', is_array($item[1]) ? $this->formatArgs($item[1]) : $item[1]);
+                $formattedValue = sprintf('<em>array</em>(%s)', is_array($item[1]) ? $this->formatArgs($item[1]) : htmlspecialchars(var_export($item[1], true), ENT_COMPAT, $this->charset));
             } elseif ('string' === $item[0]) {
                 $formattedValue = sprintf("'%s'", htmlspecialchars($item[1], ENT_QUOTES, $this->charset));
             } elseif ('null' === $item[0]) {
                 $formattedValue = '<em>null</em>';
             } elseif ('boolean' === $item[0]) {
-                $formattedValue = '<em>'.strtolower(var_export($item[1], true)).'</em>';
+                $formattedValue = '<em>'.strtolower(htmlspecialchars(var_export($item[1], true), ENT_COMPAT, $this->charset)).'</em>';
             } elseif ('resource' === $item[0]) {
                 $formattedValue = '<em>resource</em>';
             } else {
                 $formattedValue = str_replace("\n", '', var_export(htmlspecialchars((string) $item[1], ENT_QUOTES, $this->charset), true));
             }
 
-            $result[] = is_int($key) ? $formattedValue : sprintf("'%s' => %s", $key, $formattedValue);
+            $result[] = is_int($key) ? $formattedValue : sprintf("'%s' => %s", htmlspecialchars($key, ENT_COMPAT, $this->charset), $formattedValue);
         }
 
         return implode(', ', $result);
@@ -162,14 +163,19 @@ class CodeExtension extends AbstractExtension
     public function formatFile($file, $line, $text = null)
     {
         $file = trim($file);
+        $line = (int) $line;
 
         if (null === $text) {
             $text = str_replace('/', DIRECTORY_SEPARATOR, $file);
             if (0 === strpos($text, $this->rootDir)) {
                 $text = substr($text, strlen($this->rootDir));
-                $text = explode(DIRECTORY_SEPARATOR, $text, 2);
-                $text = sprintf('<abbr title="%s%2$s">%s</abbr>%s', $this->rootDir, $text[0], isset($text[1]) ? DIRECTORY_SEPARATOR.$text[1] : '');
+                $text = explode(DIRECTORY_SEPARATOR, htmlspecialchars($text, ENT_COMPAT, $this->charset), 2);
+                $text = sprintf('<abbr title="%s%2$s">%s</abbr>%s', htmlspecialchars($this->rootDir, ENT_COMPAT, $this->charset), $text[0], isset($text[1]) ? DIRECTORY_SEPARATOR.$text[1] : '');
+            } else {
+                $text = htmlspecialchars($text, ENT_COMPAT, $this->charset);
             }
+        } else {
+            $text = htmlspecialchars($text, ENT_COMPAT, $this->charset);
         }
 
         $text = "$text at line $line";
