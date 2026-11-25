@@ -1815,8 +1815,11 @@ class Request
             return '';
         }
 
-        if ($baseUrl && false !== $prefix = $this->getUrlencodedPrefix($requestUri, $baseUrl)) {
-            // full $baseUrl matches
+        // CVE-2026-135801: the script name must be a whole path segment. "/index.phpadmin" is not a request for
+        // "/index.php" with the path "/admin": reading it that way lets a client reach a path that the rules enforced
+        // in front of PHP (web server access rules, a reverse proxy) never saw
+        if ($baseUrl && false !== ($prefix = $this->getUrlencodedPrefix($requestUri, $baseUrl)) && in_array(isset($requestUri[strlen($prefix)]) ? $requestUri[strlen($prefix)] : '', array('', '/', '?'), true)) {
+            // full $baseUrl matches, and is not only the start of a longer path segment
             return $prefix;
         }
 
@@ -1836,11 +1839,18 @@ class Request
             return '';
         }
 
-        // If using mod_rewrite or ISAPI_Rewrite strip the script filename
-        // out of baseUrl. $pos !== 0 makes sure it is not matching a value
-        // from PATH_INFO or QUERY_STRING
-        if (strlen($requestUri) >= strlen($baseUrl) && (false !== $pos = strpos($requestUri, $baseUrl)) && 0 !== $pos) {
-            $baseUrl = substr($requestUri, 0, $pos + strlen($baseUrl));
+        // With mod_rewrite or ISAPI_Rewrite, the script filename can come after
+        // a prefix in the path: the base URL then ends with the script filename
+        if (!$pos = strpos($truncatedRequestUri, $baseUrl)) {
+            // the script filename isn't in the path, or only at its start, which is handled above
+            return '';
+        }
+
+        $baseUrl = substr($requestUri, 0, $pos + strlen($baseUrl));
+
+        if (!in_array(isset($requestUri[strlen($baseUrl)]) ? $requestUri[strlen($baseUrl)] : '', array('', '/', '?'), true)) {
+            // the script filename is only the start of a longer path segment
+            return '';
         }
 
         return rtrim($baseUrl, '/'.DIRECTORY_SEPARATOR);

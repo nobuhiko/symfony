@@ -6,7 +6,7 @@ EC-CUBE 3.0.18 requires Symfony `>=2.7,<2.8`. Symfony 2.7 reached its end of lif
 
 | Component | Advisories |
 |---|---|
-| http-foundation | CVE-2025-64500, CVE-2024-50345, CVE-2019-18888, CVE-2026-118514, GHSA-5mx8-mwrp-5693 |
+| http-foundation | CVE-2025-64500, CVE-2026-135801 (2.7.52-p2: a bypass of the CVE-2025-64500 fix), CVE-2024-50345, CVE-2019-18888, CVE-2026-118514, GHSA-5mx8-mwrp-5693 |
 | http-kernel | CVE-2022-24894, CVE-2019-18887 |
 | routing | CVE-2026-45065, CVE-2026-48784 |
 | validator | CVE-2024-50343, CVE-2026-123125 |
