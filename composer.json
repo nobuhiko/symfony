@@ -1,5 +1,5 @@
 {
-    "name": "nobuhiko/symfony",
+    "name": "umiushi-lab/symfony",
     "type": "library",
     "description": "The Symfony 2.7 components EC-CUBE 3.0.18 ships (2.7.52) with security fixes backported, for EC-CUBE 3.0.x shops that cannot move off the versions EC-CUBE 3.0.18 ships",
     "keywords": [
@@ -7,7 +7,7 @@
         "security",
         "eccube"
     ],
-    "homepage": "https://github.com/nobuhiko/symfony",
+    "homepage": "https://github.com/umiushi-lab/symfony",
     "license": "MIT",
     "authors": [
         {
@@ -66,6 +66,6 @@
         ]
     },
     "support": {
-        "issues": "https://github.com/nobuhiko/symfony/issues"
+        "issues": "https://github.com/umiushi-lab/symfony/issues"
     }
 }

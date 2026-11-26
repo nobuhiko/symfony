@@ -32,7 +32,7 @@ The other Symfony 2.7 components EC-CUBE uses (form, security, console and so on
 Requires Composer 2. In the shop's project root:
 
 ```
-composer require nobuhiko/symfony:^2.7.52
+composer require umiushi-lab/symfony:^2.7.52
 ```
 
 The package `replace`s the eleven `symfony/*` packages, so Composer removes the original and every other package keeps working against the same version.
