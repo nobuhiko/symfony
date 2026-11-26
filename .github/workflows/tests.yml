@@ -1,0 +1,42 @@
+# EC-CUBE 3.0.18 向けに出している 11 個の部品(Symfony 2.7.52)の、元のテスト一式を PHP 7.1 と 7.4 で回す
+# Runs the original tests of the 11 Symfony 2.7.52 components this package ships, on PHP 7.1 and 7.4.
+name: tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.1', '7.4']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer:v2
+          extensions: mbstring, intl, pdo_sqlite
+          coverage: none
+      # テストのときだけ、リポジトリの src/ 全体を読めるようにする(テストがほかの部品も使うため)。require-dev もここで入れる
+      - run: |
+          php -r '$j=json_decode(file_get_contents("composer.json"),true); $j["autoload-dev"]=array("psr-0"=>array("Symfony\\"=>"src/")); file_put_contents("composer.json", json_encode($j, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));'
+          composer require --dev --no-interaction --no-progress "symfony/phpunit-bridge:^3.4" "doctrine/annotations:~1.0" "doctrine/cache:~1.0" "egulias/email-validator:~1.2"
+      - name: phpunit (shipped components)
+        env:
+          SYMFONY_PHPUNIT_VERSION: '5.7'
+          SYMFONY_DEPRECATIONS_HELPER: weak
+        run: |
+          fail=0
+          for c in Component/Config Component/DomCrawler Component/HttpFoundation Component/HttpKernel Component/Process Component/Routing Component/Serializer Component/Validator Component/Yaml Bridge/Monolog Bridge/Twig; do
+            echo "::group::$c"
+            vendor/bin/simple-phpunit --bootstrap vendor/autoload.php src/Symfony/$c/Tests || { echo "FAILED: $c"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
