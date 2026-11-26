@@ -31,7 +31,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           tools: composer:v2
-          extensions: mbstring, intl, pdo_sqlite
+          extensions: mbstring, pdo_sqlite, :intl  # intl(ICU)が入っていると、2.7 の Intl のデータの読み込みが Country のテストで止まる(元の v2.7.52 でも同じ)
           coverage: none
       # テストのときだけ、リポジトリの src/ 全体を読めるようにする(テストがほかの部品も使うため)。require-dev もここで入れる
       - name: install test tools

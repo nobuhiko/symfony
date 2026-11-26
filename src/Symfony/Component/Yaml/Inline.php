@@ -334,7 +334,7 @@ class Inline
                     break;
                 case ']':
                     ParserState::leaveNestingLevel();
-                    ParserState::$nodeCount += count($output);
+                    ParserState::$nodeCount += count((array) $output); // $output can be a stdClass with objectForMap
 
                     return $output;
                 case ',':
@@ -394,7 +394,7 @@ class Inline
                     continue 2;
                 case '}':
                     ParserState::leaveNestingLevel();
-                    ParserState::$nodeCount += count($output);
+                    ParserState::$nodeCount += count((array) $output); // $output can be a stdClass with objectForMap
 
                     if (self::$objectForMap) {
                         return (object) $output;

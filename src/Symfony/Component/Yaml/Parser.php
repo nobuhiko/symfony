@@ -301,7 +301,7 @@ class Parser
             }
         }
 
-        ParserState::$nodeCount += count($data);
+        ParserState::$nodeCount += count((array) $data); // $data can be a stdClass with objectForMap
 
         return empty($data) ? null : $data;
     }
