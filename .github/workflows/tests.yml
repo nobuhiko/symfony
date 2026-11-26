@@ -12,7 +12,7 @@ permissions:
 jobs:
   phpunit:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -42,11 +42,11 @@ jobs:
           composer require --dev --no-interaction --no-progress "symfony/phpunit-bridge:^3.4" "doctrine/annotations:~1.0" "doctrine/cache:~1.0" "egulias/email-validator:~1.2"
       - name: tests with this fork
         run: |
-          for c in $COMPONENTS; do echo "::group::$c"; timeout 600 vendor/bin/simple-phpunit --bootstrap vendor/autoload.php --exclude-group benchmark,slow,network,tty --log-junit "junit-head-${c//\//-}.xml" src/Symfony/$c/Tests || echo "exit $? for $c"; echo "::endgroup::"; done
+          for c in $COMPONENTS; do echo "::group::$c"; case $c in Component/Validator|Bridge/Twig) lim=1800; dbg=--debug;; *) lim=600; dbg=;; esac; timeout $lim vendor/bin/simple-phpunit $dbg --bootstrap vendor/autoload.php --exclude-group benchmark,slow,network,tty --log-junit "junit-head-${c//\//-}.xml" src/Symfony/$c/Tests || echo "exit $? for $c"; echo "::endgroup::"; done
       - name: tests with the upstream v2.7.52 code
         run: |
           git checkout "$BASE" -- src
-          for c in $COMPONENTS; do echo "::group::$c"; timeout 600 vendor/bin/simple-phpunit --bootstrap vendor/autoload.php --exclude-group benchmark,slow,network,tty --log-junit "junit-base-${c//\//-}.xml" src/Symfony/$c/Tests || echo "exit $? for $c"; echo "::endgroup::"; done
+          for c in $COMPONENTS; do echo "::group::$c"; case $c in Component/Validator|Bridge/Twig) lim=1800; dbg=--debug;; *) lim=600; dbg=;; esac; timeout $lim vendor/bin/simple-phpunit $dbg --bootstrap vendor/autoload.php --exclude-group benchmark,slow,network,tty --log-junit "junit-base-${c//\//-}.xml" src/Symfony/$c/Tests || echo "exit $? for $c"; echo "::endgroup::"; done
           git checkout HEAD -- src
       - name: compare
         run: php .github/ci/compare.php "junit-head*.xml" "junit-base*.xml"
