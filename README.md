@@ -1,5 +1,7 @@
 # Symfony 2.7 components with security fixes, for EC-CUBE 3.0.x
 
+[![tests](https://github.com/umiushi-lab/symfony/actions/workflows/tests.yml/badge.svg?branch=eccube3%2F2.7)](https://github.com/umiushi-lab/symfony/actions/workflows/tests.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/umiushi-lab/symfony/badge)](https://scorecard.dev/viewer/?uri=github.com/umiushi-lab/symfony)
+
 EC-CUBE 3.0.18 requires Symfony `>=2.7,<2.8`. Symfony 2.7 reached its end of life in 2019. This package carries eleven components at 2.7.52 with the security fixes published since then backported.
 
 ## Fixed
