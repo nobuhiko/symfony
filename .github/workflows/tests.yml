@@ -36,7 +36,7 @@ jobs:
       - name: install test tools
         run: |
           rm -f composer.lock
-          composer config audit.block-insecure false
+          composer config audit.block-insecure false 2>/dev/null || true  # Composer 2.2(PHP 7.1)には、この設定も差し止めも無い
           php -r '$j=json_decode(file_get_contents("composer.json"),true); $j["autoload-dev"]=array("psr-0"=>array("Symfony\\"=>"src/")); file_put_contents("composer.json", json_encode($j, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));'
           composer require --dev --no-interaction --no-progress "symfony/phpunit-bridge:^3.4" "doctrine/annotations:~1.0" "doctrine/cache:~1.0" "egulias/email-validator:~1.2"
       - name: tests with this fork
