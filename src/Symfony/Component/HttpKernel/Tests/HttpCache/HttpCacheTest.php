@@ -1318,11 +1318,11 @@ class HttpCacheTest extends HttpCacheTestCase
         $this->request('GET', '/', array('REMOTE_ADDR' => '10.0.0.1'));
         $this->assertSame($existing, Request::getTrustedProxies());
 
+        // 127.0.0.1 is trusted for the backend request only, not added to the global trusted proxies (CVE-2026-133743)
         $that = $this;
-        $existing = array_unique(array_merge($existing, array('127.0.0.1')));
         $this->kernel->assert(function ($backendRequest) use ($existing, $that) {
             $that->assertSame($existing, Request::getTrustedProxies());
-            $that->assertsame('10.0.0.1', $backendRequest->getClientIp());
+            $that->assertSame('10.0.0.1', $backendRequest->getClientIp());
         });
 
         Request::setTrustedProxies(array());
