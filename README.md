@@ -9,8 +9,8 @@ EC-CUBE 3.0.18 requires Symfony `>=2.7,<2.8`. Symfony 2.7 reached its end of lif
 | Component | Advisories |
 |---|---|
 | http-foundation | CVE-2025-64500, CVE-2026-135801 (2.7.52-p2: a bypass of the CVE-2025-64500 fix), CVE-2024-50345, CVE-2019-18888, CVE-2026-118514, GHSA-5mx8-mwrp-5693 |
-| http-kernel | CVE-2022-24894, CVE-2019-18887 |
-| routing | CVE-2026-45065, CVE-2026-48784 |
+| http-kernel | CVE-2022-24894, CVE-2019-18887, CVE-2026-133743 (with http-foundation) |
+| routing | CVE-2026-45065, CVE-2026-48784, CVE-2026-133746 (a bypass of the CVE-2026-45065 fix), CVE-2026-133754 |
 | validator | CVE-2024-50343, CVE-2026-123125 |
 | yaml | CVE-2026-45133, CVE-2026-109413, CVE-2026-45304, CVE-2026-45305, CVE-2026-123792 |
 | serializer | CVE-2026-118515 |
@@ -19,13 +19,15 @@ EC-CUBE 3.0.18 requires Symfony `>=2.7,<2.8`. Symfony 2.7 reached its end of lif
 | config | CVE-2026-123824 |
 | process | CVE-2024-51736, CVE-2026-24739 (Windows only; not exercised, the test environment is Linux) |
 
-Not applicable to 2.7 (the code does not exist): CVE-2026-45077 (monolog-bridge has no `server:log` command or handler), CVE-2026-121623 (serializer has no `DataUriNormalizer`). monolog-bridge is included unchanged so that the whole set comes from one place.
+Not applicable to 2.7 (the code does not exist): CVE-2026-45077 (monolog-bridge has no `server:log` command or handler), CVE-2026-121623 (serializer has no `DataUriNormalizer`), CVE-2026-133761 (serializer has no `CsvEncoder`), CVE-2026-133752 (serializer has no `#[Ignore]`/`@Ignore` and no discriminator map; with `object_to_populate`, the `@Groups` of a child class only add to those of its parents in 2.7, so the requested class never allows more than the populated one). monolog-bridge is included unchanged so that the whole set comes from one place.
 
 Where this differs from upstream:
 
 - yaml: the 2.7 parser copies nested blocks at each nesting level. Instead of the upstream in-place reader, the summed size of the open nested blocks is bounded (about 16 MB), on top of the upstream limits on nesting depth and aliases.
 - http-kernel: `UriSigner` compares in constant time without requiring `symfony/polyfill-php56`.
 - serializer: 2.7 has no `DataUriNormalizer`; the object normalizers refuse to build `SplFileInfo` objects.
+- http-kernel: 2.7 names its trusted headers globally instead of a header set. The requests built by `SubRequestHandler` carry the name of their client IP header in the `SYMFONY_SUB_REQUEST_CLIENT_IP_HEADER` server parameter, and only they trust 127.0.0.1; neither the trusted proxies nor the trusted header names are changed globally any more while a fragment or a cached request is handled.
+- routing: when a generated path is refused (dot segments, characters forbidden in a host) and `strict_requirements` is off, `generate()` returns `null`, as it already does in 2.7 for a parameter that does not match its requirement (upstream returns `''`).
 
 The other Symfony 2.7 components EC-CUBE uses (form, security, console and so on) have no applicable advisory and stay on the official packages.
 
