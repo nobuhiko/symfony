@@ -253,6 +253,10 @@ class InlineFragmentRendererTest extends TestCase
      */
     private function getKernelExpectingRequest(Request $request, $strict = false)
     {
+        // SubRequestHandler marks the requests it builds, with the header that carries their client IPs
+        $clientIpHeader = Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP) ?: (Request::getTrustedHeaderName(Request::HEADER_FORWARDED) ? '' : 'X_FORWARDED_FOR');
+        $request->server->set(Request::SUB_REQUEST_CLIENT_IP_HEADER, $clientIpHeader);
+
         $kernel = $this->getMockBuilder('Symfony\Component\HttpKernel\HttpKernelInterface')->getMock();
         $kernel
             ->expects($this->once())

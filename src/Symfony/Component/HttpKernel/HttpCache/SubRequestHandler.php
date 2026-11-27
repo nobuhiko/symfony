@@ -28,7 +28,6 @@ class SubRequestHandler
      */
     public static function handle(HttpKernelInterface $kernel, Request $request, $type, $catch)
     {
-        // save global state related to trusted headers and proxies
         $trustedProxies = Request::getTrustedProxies();
         $trustedHeaders = array(
             Request::HEADER_FORWARDED => Request::getTrustedHeaderName(Request::HEADER_FORWARDED),
@@ -40,7 +39,8 @@ class SubRequestHandler
 
         // remove untrusted values
         $remoteAddr = $request->server->get('REMOTE_ADDR');
-        if (!IpUtils::checkIp($remoteAddr, $trustedProxies)) {
+        // a request built by this method (a nested sub-request) is trusted without trusting 127.0.0.1 globally
+        if (!IpUtils::checkIp($remoteAddr, $trustedProxies) && !('127.0.0.1' === $remoteAddr && $request->server->has(Request::SUB_REQUEST_CLIENT_IP_HEADER))) {
             foreach (array_filter($trustedHeaders) as $name) {
                 $request->headers->remove($name);
             }
@@ -63,38 +63,21 @@ class SubRequestHandler
             $trustedValues[0] .= sprintf(';host="%s";proto=%s', $request->getHttpHost(), $request->getScheme());
             $request->headers->set($name, implode(', ', $trustedValues));
         }
-        if ($name = $trustedHeaders[Request::HEADER_CLIENT_IP]) {
-            $request->headers->set($name, implode(', ', $trustedIps));
-        }
-        if (!$name && !$trustedHeaders[Request::HEADER_FORWARDED]) {
+        if ($clientIpHeader = $trustedHeaders[Request::HEADER_CLIENT_IP]) {
+            $request->headers->set($clientIpHeader, implode(', ', $trustedIps));
+        } elseif (!$trustedHeaders[Request::HEADER_FORWARDED]) {
+            $clientIpHeader = 'X_FORWARDED_FOR';
             $request->headers->set('X-Forwarded-For', implode(', ', $trustedIps));
-            Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, 'X_FORWARDED_FOR');
         }
 
         // fix the client IP address by setting it to 127.0.0.1,
         // which is the core responsibility of this method
         $request->server->set('REMOTE_ADDR', '127.0.0.1');
 
-        // ensure 127.0.0.1 is set as trusted proxy
-        if (!IpUtils::checkIp('127.0.0.1', $trustedProxies)) {
-            Request::setTrustedProxies(array_merge($trustedProxies, array('127.0.0.1')));
-        }
+        // trust 127.0.0.1 for this request and for the ones copied from it, but not globally:
+        // other requests coming from 127.0.0.1, like the main one, carry headers set by the client (CVE-2026-133743)
+        $request->server->set(Request::SUB_REQUEST_CLIENT_IP_HEADER, (string) $clientIpHeader);
 
-        try {
-            $e = null;
-            $response = $kernel->handle($request, $type, $catch);
-        } catch (\Throwable $e) {
-        } catch (\Exception $e) {
-        }
-
-        // restore global state
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, $trustedHeaders[Request::HEADER_CLIENT_IP]);
-        Request::setTrustedProxies($trustedProxies);
-
-        if (null !== $e) {
-            throw $e;
-        }
-
-        return $response;
+        return $kernel->handle($request, $type, $catch);
     }
 }

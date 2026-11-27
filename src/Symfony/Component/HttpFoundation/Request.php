@@ -35,6 +35,12 @@ class Request
     const HEADER_CLIENT_PROTO = 'client_proto';
     const HEADER_CLIENT_PORT = 'client_port';
 
+    /**
+     * The server parameter set by HttpKernel's SubRequestHandler on the requests it builds, which come from 127.0.0.1.
+     * Its value is the name of the header that carries the client IPs of such a request ('' when there is none).
+     */
+    const SUB_REQUEST_CLIENT_IP_HEADER = 'SYMFONY_SUB_REQUEST_CLIENT_IP_HEADER';
+
     const METHOD_HEAD = 'HEAD';
     const METHOD_GET = 'GET';
     const METHOD_POST = 'POST';
@@ -833,7 +839,8 @@ class Request
         }
 
         $hasTrustedForwardedHeader = self::$trustedHeaders[self::HEADER_FORWARDED] && $this->headers->has(self::$trustedHeaders[self::HEADER_FORWARDED]);
-        $hasTrustedClientIpHeader = self::$trustedHeaders[self::HEADER_CLIENT_IP] && $this->headers->has(self::$trustedHeaders[self::HEADER_CLIENT_IP]);
+        $clientIpHeader = $this->isSubRequestFromLocalhost() ? (string) $this->server->get(self::SUB_REQUEST_CLIENT_IP_HEADER) : self::$trustedHeaders[self::HEADER_CLIENT_IP];
+        $hasTrustedClientIpHeader = $clientIpHeader && $this->headers->has($clientIpHeader);
 
         if ($hasTrustedForwardedHeader) {
             $forwardedHeader = $this->headers->get(self::$trustedHeaders[self::HEADER_FORWARDED]);
@@ -845,7 +852,7 @@ class Request
         }
 
         if ($hasTrustedClientIpHeader) {
-            $xForwardedForClientIps = array_map('trim', explode(',', $this->headers->get(self::$trustedHeaders[self::HEADER_CLIENT_IP])));
+            $xForwardedForClientIps = array_map('trim', explode(',', $this->headers->get($clientIpHeader)));
 
             $xForwardedForClientIps = $this->normalizeAndFilterClientIps($xForwardedForClientIps, $ip);
             $clientIps = $xForwardedForClientIps;
@@ -1995,7 +2002,18 @@ class Request
 
     private function isFromTrustedProxy()
     {
-        return self::$trustedProxies && IpUtils::checkIp($this->server->get('REMOTE_ADDR'), self::$trustedProxies);
+        return $this->isSubRequestFromLocalhost() || (self::$trustedProxies && IpUtils::checkIp($this->server->get('REMOTE_ADDR'), self::$trustedProxies));
+    }
+
+    /**
+     * Tells whether this request was built by HttpKernel's SubRequestHandler (or copied from such a request).
+     *
+     * Only these requests trust 127.0.0.1 as a proxy: other requests coming from 127.0.0.1,
+     * like the main request while a fragment renders, carry the forwarded headers sent by the client (CVE-2026-133743).
+     */
+    private function isSubRequestFromLocalhost()
+    {
+        return '127.0.0.1' === $this->server->get('REMOTE_ADDR') && $this->server->has(self::SUB_REQUEST_CLIENT_IP_HEADER);
     }
 
     private function normalizeAndFilterClientIps(array $clientIps, $ip)
@@ -2015,7 +2033,7 @@ class Request
                 continue;
             }
 
-            if (IpUtils::checkIp($clientIp, self::$trustedProxies)) {
+            if (IpUtils::checkIp($clientIp, self::$trustedProxies) || ('127.0.0.1' === $clientIp && $this->isSubRequestFromLocalhost())) {
                 unset($clientIps[$key]);
 
                 // Fallback to this when the client IP falls into the range of trusted proxies

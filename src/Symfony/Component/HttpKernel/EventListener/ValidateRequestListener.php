@@ -12,6 +12,7 @@
 namespace Symfony\Component\HttpKernel\EventListener;
 
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
@@ -33,7 +34,8 @@ class ValidateRequestListener implements EventSubscriberInterface
         }
         $request = $event->getRequest();
 
-        if ($request::getTrustedProxies()) {
+        // the requests built by HttpCache's SubRequestHandler trust 127.0.0.1 without it being a global trusted proxy
+        if ($request::getTrustedProxies() || $request->server->has(Request::SUB_REQUEST_CLIENT_IP_HEADER)) {
             // This will throw an exception if the headers are inconsistent.
             $request->getClientIps();
         }

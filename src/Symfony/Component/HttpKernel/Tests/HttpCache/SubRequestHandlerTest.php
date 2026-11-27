@@ -129,6 +129,54 @@ class SubRequestHandlerTest extends TestCase
         $this->assertSame($globalState, $this->getGlobalState());
     }
 
+    public function testOtherRequestsFromLocalhostAreNotTrusted()
+    {
+        $mainRequest = Request::create('https://example.com/');
+        $mainRequest->server->set('REMOTE_ADDR', '127.0.0.1');
+        $mainRequest->headers->set('X-Forwarded-For', '10.0.0.2');
+        $mainRequest->headers->set('X-Forwarded-Host', 'evil.example');
+        $mainRequest->headers->set('X-Forwarded-Proto', 'http');
+
+        $that = $this;
+        $kernel = new TestSubRequestHandlerKernel(function ($request, $type, $catch) use ($that, $mainRequest) {
+            $that->assertSame('example.com', $request->getHost());
+            $that->assertSame('127.0.0.1', $mainRequest->getClientIp());
+            $that->assertSame('example.com', $mainRequest->getHost());
+            $that->assertTrue($mainRequest->isSecure());
+        });
+
+        $subRequest = Request::create('/_fragment', 'GET', array(), array(), array(), $mainRequest->server->all());
+        SubRequestHandler::handle($kernel, $subRequest, HttpKernelInterface::SUB_REQUEST, false);
+
+        $this->assertSame(self::$globalState, $this->getGlobalState());
+    }
+
+    public function testNestedSubRequestsKeepTheClientIp()
+    {
+        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, '');
+        Request::setTrustedHeaderName(Request::HEADER_FORWARDED, '');
+
+        $request = Request::create('/');
+        $request->server->set('REMOTE_ADDR', '10.0.0.1');
+
+        $that = $this;
+        $kernel = new TestSubRequestHandlerKernel(function ($request, $type, $catch) use ($that) {
+            $that->assertSame('10.0.0.1', $request->getClientIp());
+
+            $fragmentKernel = new TestSubRequestHandlerKernel(function ($fragment, $type, $catch) use ($that) {
+                $that->assertSame('127.0.0.1', $fragment->server->get('REMOTE_ADDR'));
+                $that->assertSame('10.0.0.1', $fragment->getClientIp());
+            });
+
+            SubRequestHandler::handle($fragmentKernel, $request->duplicate(), HttpKernelInterface::SUB_REQUEST, false);
+        });
+
+        SubRequestHandler::handle($kernel, $request, HttpKernelInterface::MASTER_REQUEST, true);
+
+        $this->assertSame('', Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP));
+        $this->assertSame(array(), Request::getTrustedProxies());
+    }
+
     private function getGlobalState()
     {
         return array(
