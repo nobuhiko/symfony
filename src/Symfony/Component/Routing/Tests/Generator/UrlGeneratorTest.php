@@ -340,6 +340,149 @@ class UrlGeneratorTest extends TestCase
         );
     }
 
+    /**
+     * @dataProvider provideParametersThatStartThePathWithTwoSlashes
+     */
+    public function testParametersThatStartThePathWithTwoSlashes($strictRequirements, $routePath, array $requirements, array $parameters, $path)
+    {
+        $routes = $this->getRoutes('test', new Route($routePath, array(), $requirements));
+        $generator = $this->getGenerator($routes, array('BaseUrl' => ''));
+        $generator->setStrictRequirements($strictRequirements);
+
+        $this->assertSame('/%2F'.substr($path, 2), $generator->generate('test', $parameters));
+        $this->assertSame('http://localhost'.$path, $generator->generate('test', $parameters, UrlGeneratorInterface::ABSOLUTE_URL));
+
+        $generator->getContext()->setHost('');
+        $this->assertSame('/%2F'.substr($path, 2), $generator->generate('test', $parameters, UrlGeneratorInterface::ABSOLUTE_URL));
+
+        $generator->getContext()->setBaseUrl('/app.php');
+        $this->assertSame('/app.php'.$path, $generator->generate('test', $parameters));
+    }
+
+    public function provideParametersThatStartThePathWithTwoSlashes()
+    {
+        $data = array(
+            array(null, '/{_locale}/blog/rss.xml', array('_locale' => 'en|fr|vi|zh_CN'), array('_locale' => '/evil.com'), '//evil.com/blog/rss.xml'),
+        );
+
+        foreach (array(true, false, null) as $strictRequirements) {
+            $data[] = array($strictRequirements, '/{slug}', array('slug' => '.+'), array('slug' => '/evil.example'), '//evil.example');
+            $data[] = array($strictRequirements, '/{slug}', array('slug' => '.+'), array('slug' => '//evil.example'), '///evil.example');
+            $data[] = array($strictRequirements, '/{dir}/{slug}', array('dir' => '.*'), array('dir' => '', 'slug' => 'evil.example'), '//evil.example');
+        }
+
+        return $data;
+    }
+
+    /**
+     * @dataProvider provideParametersThatMakeDotSegments
+     * @expectedException \Symfony\Component\Routing\Exception\InvalidParameterException
+     */
+    public function testParametersThatMakeDotSegments($routePath, array $requirements, array $parameters)
+    {
+        $routes = $this->getRoutes('test', new Route($routePath, array(), $requirements));
+        $this->getGenerator($routes)->generate('test', $parameters);
+    }
+
+    public function provideParametersThatMakeDotSegments()
+    {
+        return array(
+            array('/foo/{path}/bar', array('path' => '.+'), array('path' => '../../..')),
+            array('/foo/{path}/bar', array('path' => '.+'), array('path' => '././.')),
+            array('/foo/{path}', array('path' => '.+'), array('path' => '../admin')),
+            array('/foo/{path}', array('path' => '.+'), array('path' => 'a/..')),
+            array('/{path}', array('path' => '.+'), array('path' => '/./evil.example')),
+            array('/user/{id}/edit', array(), array('id' => '..')),
+            array('/user/{id}/edit', array(), array('id' => '.')),
+            array('/foo/.{suffix}', array(), array('suffix' => '.')),
+            array('/foo/.{suffix}', array('suffix' => '.+'), array('suffix' => '/bar')),
+            array('/foo/{path}./bar', array('path' => '.+'), array('path' => 'a/')),
+        );
+    }
+
+    public function testParametersThatMakeDotSegmentsInNonStrictMode()
+    {
+        $routes = $this->getRoutes('test', new Route('/foo/{path}', array(), array('path' => '.+')));
+
+        foreach (array(false, null) as $strictRequirements) {
+            $generator = $this->getGenerator($routes);
+            $generator->setStrictRequirements($strictRequirements);
+
+            $this->assertNull($generator->generate('test', array('path' => '../admin')));
+        }
+    }
+
+    public function testParametersWithDotsThatDoNotMakeDotSegments()
+    {
+        $routes = $this->getRoutes('test', new Route('/foo/{path}.json', array(), array('path' => '.+')));
+        $generator = $this->getGenerator($routes);
+
+        $this->assertSame('/app.php/foo/.../a../..a/.a/a..json', $generator->generate('test', array('path' => '.../a../..a/.a/a.')));
+        $this->assertSame('/app.php/foo/a/..json', $generator->generate('test', array('path' => 'a/.')));
+    }
+
+    /**
+     * @dataProvider provideHostParametersWithForbiddenCharacters
+     * @expectedException \Symfony\Component\Routing\Exception\InvalidParameterException
+     */
+    public function testHostParameterWithForbiddenCharacters($value)
+    {
+        $routes = $this->getRoutes('test', new Route('/dashboard', array(), array('tenant' => '.+'), array(), '{tenant}.example.com'));
+        $this->getGenerator($routes)->generate('test', array('tenant' => $value), UrlGeneratorInterface::ABSOLUTE_URL);
+    }
+
+    public function provideHostParametersWithForbiddenCharacters()
+    {
+        return array(
+            array('evil%2Ecom#'),
+            array('3232235777/'),
+            array('evil.example/'),
+            array('evil?'),
+            array('user@evil'),
+            array('evil\\'),
+            array('evil:8080'),
+            array('evil example'),
+            array("evil\t"),
+            array("evil\n"),
+            array("evil\0"),
+            array("evil\x7F"),
+            array('evil<'),
+            array('evil>'),
+            array('evil^'),
+            array('evil|'),
+            array("evil\xEF\xBC\x8Ecom"),
+            array("evil\xE3\x80\x82com"),
+            array("evil\xEF\xBD\xA1com"),
+            array('[::1]:80'),
+            array('[evil.com]'),
+            array('[::1]x'),
+        );
+    }
+
+    public function testHostParameterWithForbiddenCharactersInNonStrictMode()
+    {
+        $routes = $this->getRoutes('test', new Route('/dashboard', array(), array(), array(), '{tenant}.example.com'));
+
+        foreach (array(false, null) as $strictRequirements) {
+            $generator = $this->getGenerator($routes);
+            $generator->setStrictRequirements($strictRequirements);
+
+            $this->assertNull($generator->generate('test', array('tenant' => 'evil%2Ecom#'), UrlGeneratorInterface::ABSOLUTE_URL));
+        }
+    }
+
+    public function testHostParameterWithValidCharacters()
+    {
+        $routes = $this->getRoutes('test', new Route('/dashboard', array(), array('tenant' => '.+'), array(), '{tenant}.example.com'));
+        $generator = $this->getGenerator($routes);
+
+        $this->assertSame('http://a-b_c.d.example.com/app.php/dashboard', $generator->generate('test', array('tenant' => 'a-b_c.d'), UrlGeneratorInterface::ABSOLUTE_URL));
+        $this->assertSame("http://b\xC3\xBCcher.example.com/app.php/dashboard", $generator->generate('test', array('tenant' => "b\xC3\xBCcher"), UrlGeneratorInterface::ABSOLUTE_URL));
+
+        $routes = $this->getRoutes('test', new Route('/dashboard', array(), array('domain' => '.+'), array(), '{domain}'));
+        $this->assertSame('http://[::1]/app.php/dashboard', $this->getGenerator($routes)->generate('test', array('domain' => '[::1]'), UrlGeneratorInterface::ABSOLUTE_URL));
+    }
+
     public function testEncodingOfRelativePathSegments()
     {
         $routes = $this->getRoutes('test', new Route('/dir/../dir/..'));

@@ -153,7 +153,25 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
                         return;
                     }
 
-                    $url = $token[1].$mergedParams[$token[3]].$url;
+                    // browsers resolve "." and ".." path segments even when they are percent-encoded (CVE-2026-133746)
+                    $value = (string) $mergedParams[$token[3]];
+                    if (false !== strpbrk($value, './')) {
+                        $nextSegment = explode('/', $url, 2);
+                        if (preg_match('#(?:^|/)\.\.?(?:/|$)#D', $token[1].$value.$nextSegment[0])) {
+                            $message = sprintf('Parameter "%s" for route "%s" must not add "." or ".." segments to the path ("%s" given) to generate a corresponding URL.', $token[3], $name, $value);
+                            if ($this->strictRequirements) {
+                                throw new InvalidParameterException($message);
+                            }
+
+                            if ($this->logger) {
+                                $this->logger->error($message);
+                            }
+
+                            return;
+                        }
+                    }
+
+                    $url = $token[1].$value.$url;
                     $optional = false;
                 }
             } else {
@@ -218,7 +236,24 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
                         return;
                     }
 
-                    $routeHost = $token[1].$mergedParams[$token[3]].$routeHost;
+                    // characters that are forbidden in a host, or that IDNA maps to ".", can change which host the URL points to;
+                    // only IPv6 literals like "[::1]" can contain some of them (CVE-2026-133754)
+                    $value = isset($mergedParams[$token[3]]) ? (string) $mergedParams[$token[3]] : '';
+                    if (preg_match('/[\x00-\x20#%\/:<>?@\[\\\\\]^|\x7F]|\xE3\x80\x82|\xEF\xBC\x8E|\xEF\xBD\xA1/', $value) && !('[' === substr($value, 0, 1) && ']' === substr($value, -1) && filter_var(substr($value, 1, -1), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6))) {
+                        $message = sprintf('Parameter "%s" for route "%s" must not contain characters that are forbidden in a host ("%s" given) to generate a corresponding URL.', $token[3], $name, $value);
+
+                        if ($this->strictRequirements) {
+                            throw new InvalidParameterException($message);
+                        }
+
+                        if ($this->logger) {
+                            $this->logger->error($message);
+                        }
+
+                        return;
+                    }
+
+                    $routeHost = $token[1].$value.$routeHost;
                 } else {
                     $routeHost = $token[1].$routeHost;
                 }
@@ -248,6 +283,11 @@ class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInt
             $url = self::getRelativePath($this->context->getPathInfo(), $url);
         } else {
             $url = $schemeAuthority.$this->context->getBaseUrl().$url;
+
+            // without scheme and host, a URL that starts with "//" would point to another host (CVE-2026-133746)
+            if ('' === $schemeAuthority && '//' === substr($url, 0, 2)) {
+                $url = '/%2F'.substr($url, 2);
+            }
         }
 
         // add a query string if needed
